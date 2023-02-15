@@ -2,14 +2,14 @@
 title: "Summary"
 output: html_document
 params:
-  folder: /lustre/scratch126/cellgen/cellgeni/pasham/raw/2110.SNARE-seq/v04.fq/pipeline.out/3_modSHARE_nuclei
+  folder: /lustre/scratch126/cellgen/cellgeni/pasham/raw/2110.SNARE-seq/v04.fq/pipeline.out/F2_msBrain_Nu
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r, echo=FALSE, include=FALSE}
+```{r}
 library(visutils)
 library(ArchR)
 library(Rsamtools)
@@ -24,50 +24,60 @@ print(params$folder)
 
 # Load Data
 ```{r}
-ataca = readRDS(paste0(params$folder,'/whole.archr.prj.rds'))
-atacf = readRDS(paste0(params$folder,'/filtered.archr.prj.rds'))
-cdnaf = readRDS(paste0(params$folder,'/filtered.cdna.rds'))
-cdnaa = Seurat::Read10X(paste0(params$folder,'/cDNA/output/GeneFull/raw'))
+qc = readRDS(paste0(params$folder,'/qc.rds'))
+ataca =readRDS(paste0(params$folder,'/whole.archr.prj.rds'))
 ```
 
 # Load Metrics
 ```{r}
-jsons = list.files(params$folder,pattern = '*.json',full.names = TRUE)
-atacstat = apply(do.call(rbind,lapply(jsons[grepl('atac.+bc',jsons)],function(f){unlist(jsonlite::read_json(f)$general)})),2,sum)
-cdnastat = apply(do.call(rbind,lapply(jsons[grepl('cdna.+bc',jsons)],function(f){unlist(jsonlite::read_json(f)$general)})),2,sum)
-starsolo = read.csv(paste0(params$folder,'/cDNA/output/GeneFull/Summary.csv'),header = F,row.names = 1)
-
-
-metrics = list()
-metrics$Sample = basename(params$folder)
-metrics$Genome = atacf@genomeAnnotation$genome
-metrics$nCells = ncol(cdnaf)
-# cDNA
-metrics[['cDNA reads']]                          = cdnastat[1]
-metrics[['cDNA valid barcodes no mismatches']]   = cdnastat[2]
-metrics[['cDNA valid barcodes <=1 mismatches']]  = cdnastat[3]
-metrics[['cDNA uniquely mapped reads']]          = paste0(round(starsolo['Reads Mapped to Genome: Unique',1]*100,1),'%')
-metrics[['cDNA Sequencing Saturation']]          = starsolo['Sequencing Saturation',1] 
-metrics[['cDNA GeneFull unique reads']]          = paste0(round(starsolo['Reads Mapped to GeneFull: Unique GeneFull',1]*100,1),'%')
-metrics[['cDNA total UMI']]                      = sum(cdnaa)
-metrics[['cDNA UMI in cells']]                   = sum(cdnaf$nCount_RNA)
-metrics[['cDNA median UMI per cell']]            = median(cdnaf$nCount_RNA)
-metrics[['cDNA median genes per cell']]          = median(cdnaf$nFeature_RNA)
-metrics[['cDNA total genes detected']]           = sum(rowSums(cdnaf@assays$RNA@counts)>0)
-
-# ATAC
-metrics[['ATAC read pairs']]                     = atacstat[1]
-metrics[['ATAC valid barcodes no mismatches']]   = atacstat[2]
-metrics[['ATAC valid barcodes <=1 mismatches']]  = atacstat[3]
-metrics[['ATAC total fragments']]                = sum(ataca@cellColData$nFrags)
-metrics[['ATAC fragments in cells']]             = sum(atacf@cellColData$nFrags)
-metrics[['ATAC median fragments per cell']]      = median(atacf@cellColData$nFrags)
+cdna.metrics_ = cdna.metrics = qc$metrics$cdna.metrics
+atac.metrics_ = atac.metrics = qc$metrics$atac.metrics
 ```
+
 ```{r}
-r = data.frame(names(metrics),unname(unlist(metrics)))
+# prepare for printing
+cdna.metrics_[['Valid barcodes no mismatches']]   = paste0(cdna.metrics[['Valid barcodes no mismatches']] ,' (',round(cdna.metrics[['Valid barcodes no mismatches' ]]/cdna.metrics[['Total reads']]*100,1),'%)')
+cdna.metrics_[['Valid barcodes <=1 mismatches']]  = paste0(cdna.metrics[['Valid barcodes <=1 mismatches']],' (',round(cdna.metrics[['Valid barcodes <=1 mismatches']]/cdna.metrics[['Total reads']]*100,1),'%)')
+cdna.metrics_[['Uniquely mapped reads']]          = paste0(round(cdna.metrics[['Uniquely mapped reads']]*100,1),'%')
+cdna.metrics_[['GeneFull unique reads']]          = paste0(round(cdna.metrics[['GeneFull unique reads']]*100,1),'%')
+cdna.metrics_[['Gene unique reads']]              = paste0(round(cdna.metrics[['Gene unique reads']]*100,1),'%')
+cdna.metrics_[['Fraction MT UMI']]                = paste0(round(cdna.metrics[['Fraction MT UMI']]*100,2),'%')
+
+
+atac.metrics_[['mean TSS enrichment score']]                  = round(atac.metrics[['mean TSS enrichment score']],1)
+atac.metrics_[['Valid barcodes no mismatches']]               = paste0(atac.metrics[['Valid barcodes no mismatches']] ,' (',round(atac.metrics[['Valid barcodes no mismatches' ]]/atac.metrics[['Read pairs']]*100,1),'%)')
+atac.metrics_[['Valid barcodes <=1 mismatches']]              = paste0(atac.metrics[['Valid barcodes <=1 mismatches']],' (',round(atac.metrics[['Valid barcodes <=1 mismatches']]/atac.metrics[['Read pairs']]*100,1),'%)')
+atac.metrics_[['Fragments in cells']]                         = paste0(atac.metrics[['Fragments in cells']],' (',round(atac.metrics[['Fragments in cells']]/atac.metrics[['Total fragments used']]*100,1),'%)')
+atac.metrics_[['Fraction MT reads']]                          = paste0(round(atac.metrics[['Fraction MT reads']]*100,2),'%')  
+atac.metrics_[['Fraction non-chr reads']]                     = paste0(round(atac.metrics[['Fraction non-chr reads']]*100,3),'%')
+atac.metrics_[['Fraction of genome in peaks']]                = paste0(round(atac.metrics[['Fraction of genome in peaks']]*100,1),'%')
+atac.metrics_[['Fraction of fragments overlapping TSS']]      = paste0(round(atac.metrics[['Fraction of fragments overlapping TSS']]*100,1),'%')
+atac.metrics_[['Fraction of fragments overlapping peaks']]    = paste0(round(atac.metrics[['Fraction of fragments overlapping peaks']]*100,1),'%')
+atac.metrics_[['Fraction duplicates']]                        = paste0(round(atac.metrics[['Fraction duplicates']]*100,1),'%')
+```
+
+
+# General info
+```{r}
+r = data.frame(names(qc$metrics$info),unname(unlist(qc$metrics$info)))
 colnames(r) = NULL#c(paste(rep('_',max(nchar(r[,1]),na.rm=T)+5),collapse = ''),paste(rep('_',max(nchar(r[,2]),na.rm=T)+5),collapse = ''))
 knitr::kable(r)
 ```
+
+# ATAC metrics
+```{r}
+r = data.frame(names(atac.metrics_),unname(unlist(atac.metrics_)))
+colnames(r) = NULL
+knitr::kable(r)
+```
+
+# cDNA metrics
+```{r}
+r = data.frame(names(cdna.metrics_),unname(unlist(cdna.metrics_)))
+colnames(r) = NULL
+knitr::kable(r)
+```
+
 
 # Cell calling
 ```{r, fig.height = 5, fig.width = 5}
@@ -77,47 +87,44 @@ legend('topleft',bty='n',col=1:2,legend=paste0(c('Non-Cells','Cells'),' (',c(sum
 ```
 
 # ATAC QC
-```{r}
-fragsize = plotFragmentSizes(ArchRProj = atacf,returnDF = TRUE)
-tssenrich = plotTSSEnrichment(ArchRProj = atacf,returnDF = TRUE)
-```
 ```{r,fig.height = 5, fig.width = 10}
 par(mfrow=c(1,2),bty='n')
-plot(fragsize$fragmentSize,fragsize$fragmentPercent,xlab='ATAC-seq Fragment Size (bp)',ylab='Percentage of Fragments',type='l',lwd=2)
-plot(tssenrich$x,tssenrich$smoothValue,xlab='Distance From Center (bp)',ylab='Normalized Intensity Profile',type='l',lwd=2)
+plot(qc$fragsize$fragmentSize,qc$fragsize$fragmentPercent,xlab='ATAC-seq Fragment Size (bp)',ylab='Percentage of Fragments',type='l',lwd=2)
+plot(qc$tssenrich$x,qc$tssenrich$smoothValue,xlab='Distance From Center (bp)',ylab='Normalized Intensity Profile',type='l',lwd=2)
+#plot(atacf@cellColData$nFrags,atacf@cellColData$FRIP,pch=16,log='x')
 ```
 
 # Cell Clustering
-```{r}
-cdna.umap = as.data.frame(cdnaf@reductions$umap@cell.embeddings)
-cdna.umap$clusters = cdnaf$seurat_clusters
-atac.umap = atacf@embeddings$UMAP$df
-rownames(atac.umap) = sapply(strsplit(rownames(atac.umap),'#'),'[',2)
-ccd = atacf@cellColData
-rownames(ccd) = sapply(strsplit(rownames(ccd),'#'),'[',2)
-atac.umap$clusters = NA
-atac.umap[rownames(ccd),'clusters'] = ccd$Clusters
-atac.umap = atac.umap[rownames(cdna.umap),]
-```
-
 ```{r,fig.height = 10, fig.width = 14}
 par(mfrow=c(2,2),mar=c(0,0,1,10),bty='n')
-plotVisium(cdna.umap,cdna.umap$clusters,main='cDNA, clusters by cDNA',t='xy',pch=16,show.cluster.sizes = TRUE,label.clusters = TRUE)
-plotVisium(cdna.umap,atac.umap$clusters,main='cDNA, clusters by ATAC',t='xy',pch=16,show.cluster.sizes = TRUE,label.clusters = TRUE)
+cex = min(1/nrow(qc$cdna.umap)*3000,1)
+plotVisium(qc$cdna.umap,qc$cdna.umap$seurat_clusters,main='cDNA, clusters by cDNA',t='xy',pch=16,show.cluster.sizes = TRUE,label.clusters = TRUE,randomize.points = TRUE,cex=cex)
+plotVisium(qc$cdna.umap,qc$atac.umap$Clusters,main='cDNA, clusters by ATAC',t='xy',pch=16,show.cluster.sizes = TRUE,label.clusters = TRUE,randomize.points = TRUE,cex=cex)
 
-plotVisium(atac.umap,cdna.umap$clusters,main='ATAC, clusters by cDNA',t='xy',pch=16,show.cluster.sizes = TRUE,label.clusters = TRUE)
-plotVisium(atac.umap,atac.umap$clusters,main='ATAC, clusters by ATAC',t='xy',pch=16,show.cluster.sizes = TRUE,label.clusters = TRUE)
+plotVisium(qc$atac.umap,qc$cdna.umap$seurat_clusters,main='ATAC, clusters by cDNA',t='xy',pch=16,show.cluster.sizes = TRUE,label.clusters = TRUE,randomize.points = TRUE,cex=cex)
+plotVisium(qc$atac.umap,qc$atac.umap$Clusters,main='ATAC, clusters by ATAC',t='xy',pch=16,show.cluster.sizes = TRUE,label.clusters = TRUE,randomize.points = TRUE,cex=cex)
 ```
-```{r,fig.height = 5, fig.width = 5}
-t = table(atac.umap$clusters,cdna.umap$clusters)
-imageWithText(t[,order(apply(t,2,which.max))],xlab='clusters by ATAC',ylab='clusters by cDNA')
+
+
+# UMI/fragment coverage
+```{r,fig.height = 5, fig.width = 14}
+par(mfrow=c(1,2),mar=c(0,0,1,10),bty='n')
+plotVisium(qc$cdna.umap,qc$cdna.umap$nFeature_RNA,zfun = log1p,main='cDNA',t='xy',pch=16,legend.args = list(title='total UMIs'),randomize.points = TRUE,cex=cex)
+plotVisium(qc$atac.umap,qc$atac.umap$nFrags,zfun = log1p,main='ATAC',t='xy',pch=16,legend.args = list(title='total frags'),randomize.points = TRUE,cex=cex)
 ```
-```{r}
-qc = list(cdna.umap=cdna.umap,
-          atac.umap=atac.umap,
-          metrics=metrics,
-          fragsize=fragsize,
-          tssenrich=tssenrich
-          )
-saveRDS(qc,paste0(params$folder,'/qc.rds'))
+
+
+```{r,fig.height = 5, fig.width = 14}
+par(mfrow=c(1,2),mar=c(0,0,1,10),bty='n')
+plotVisium(qc$atac.umap,qc$atac.umap$FRIP,main='ATAC (fraction reads in peaks)',t='xy',pch=16,randomize.points = TRUE,cex=cex)
+plotVisium(qc$atac.umap,qc$atac.umap$TSSEnrichment,main='ATAC (TSSEnrichment)',t='xy',pch=16,randomize.points = TRUE,cex=cex)
+```
+
+
+
+```{r,fig.height = 5, fig.width = 8}
+t = table(qc$atac.umap$Clusters,qc$cdna.umap$seurat_clusters)
+t = t[,order(apply(t,2,which.max))]
+main = paste0('Chisq p=',format(chisq.test(t)$p.value,scienciefic=TRUE,digits=2))
+imageWithText(log1p(t),t,xlab='clusters by ATAC',ylab='clusters by cDNA',col=num2col(1:100,c('white','gray','orange','red')),bty='n',main=main)
 ```

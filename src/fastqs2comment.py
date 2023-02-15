@@ -19,7 +19,7 @@ while True:
   if read[0] == '':
     break
   comment = [cin.readline() for i in range(0,4)]
-  read[0] = read[0].split(' ')[0] + ' ' + args.prefix + comment[1]
+  read[0] = read[0].split(' ')[0].strip() + ' ' + args.prefix + comment[1]
   sys.stdout.writelines(read)
 
 
